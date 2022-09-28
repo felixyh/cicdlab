@@ -32,20 +32,6 @@ export HTTPS_PROXY="10.64.1.81:8080"
 export HTTP_PROXY="10.64.1.81:8080"
 export NO_PROXY="10.64.0.0/16,172.168.1.0/24,127.0.0.0/8,10.0.0.0/8,192.168.0.0/16"
 
-# Set proxy for docker
-mkdir /etc/systemd/system/docker.service.d
-cat << EOF > /etc/systemd/system/docker.service.d/http-proxy.conf
-[Service]
-Environment="HTTP_PROXY=10.64.1.81:8080"
-Environment="HTTPS_PROXY=10.64.1.81:8080"
-Environment="NO_PROXY=localhost,127.0.0.0/8,10.0.0.0/8,192.168.0.0/16,docker-registry.somecorporation.com"
-EOF
-
-# Reload and restart docker
-systemctl daemon-reload && systemctl restart docker
-
-# Show docker proxy settings
-systemctl show --property Environment docker
 
 # Install required packages. yum-utils provides the yum-config-manager utility, and device-mapper-persistent-data and lvm2 are required by the devicemapper storage driver.
 yum install -y yum-utils device-mapper-persistent-data lvm2
@@ -61,6 +47,22 @@ yum install -y docker-ce docker-ce-cli containerd.io
 
 
 systemctl start docker &&  systemctl enable docker
+
+
+# Set proxy for docker
+mkdir /etc/systemd/system/docker.service.d
+cat << EOF > /etc/systemd/system/docker.service.d/http-proxy.conf
+[Service]
+Environment="HTTP_PROXY=10.64.1.81:8080"
+Environment="HTTPS_PROXY=10.64.1.81:8080"
+Environment="NO_PROXY=localhost,127.0.0.0/8,10.0.0.0/8,192.168.0.0/16,docker-registry.somecorporation.com"
+EOF
+
+# Reload and restart docker
+systemctl daemon-reload && systemctl restart docker
+
+# Show docker proxy settings
+systemctl show --property Environment docker
 
 # Install kubeadm, kubelet and kubectl with Aliyun repo
 cat <<EOF > /etc/yum.repos.d/kubernetes.repo
