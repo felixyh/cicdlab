@@ -588,6 +588,336 @@ Install harbor
 
 
 
+## 01.6. Setup InfluxDB on Kubernetes
+
+### Step by step
+
+Reference articles:
+
+https://www.cnblogs.com/zhangsi-lzq/p/14457707.html
+
+https://opensource.com/article/19/2/deploy-influxdb-grafana-kubernetes
+
+- Create namespace: influxdb
+
+  ```
+  kubectl create namespace influxdb
+  ```
+
+- create a secret using the **kubectl create secret** command and some basic credentials
+
+  ```
+  kubectl create secret generic influxdb-creds -n influxdb \
+    --from-literal=INFLUXDB_DATABASE=twittergraph \
+    --from-literal=INFLUXDB_USERNAME=root \
+    --from-literal=INFLUXDB_PASSWORD=root \
+    --from-literal=INFLUXDB_HOST=influxdb
+    
+  kubectl get secret influxdb-creds -n influxdb
+  kubectl describe secret influxdb-creds -n influxdb
+  ```
+
+  
+
+- create and configure persistent storage for InfluxDB
+
+  - Setup the nfs server: 192.168.22.60
+
+    ```
+    # 在nfs上安装nfs服务
+    [root@nfs ~]# yum install nfs-utils -y
+    
+    # 准备一个共享目录
+    [root@nfs ~]# mkdir /root/data/influxdbpv -pv
+    
+    # 将共享目录以读写权限暴露给192.168.5.0/24网段中的所有主机
+    [root@nfs ~]# vim /etc/exports
+    [root@nfs ~]# more /etc/exports
+    /root/data/influxdbpv     192.168.22.0/24(rw,no_root_squash)
+    
+    # 启动nfs服务
+    [root@nfs ~]# systemctl restart nfs-server
+    
+    # 在每个node上安装nfs服务，注意不需要启动
+    [~]# yum install nfs-utils -y
+    ```
+
+  - create pv and pvc
+
+    ```yaml
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata:
+      name:  influxdbpv
+    spec:
+      capacity: 
+        storage: 10Gi
+      accessModes:
+      - ReadWriteMany
+      persistentVolumeReclaimPolicy: Retain
+      nfs:
+        path: /root/data/influxdbpv
+        server: 192.168.22.60
+    ---
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: influxdb
+      namespace: influxdb
+    spec:
+      accessModes:
+      - ReadWriteMany
+      resources:
+        requests:
+          storage: 8Gi
+    ```
+
+    
+
+- create configmap from default conf file
+
+  ```bash
+  docker pull influxdb:1.6.4
+  
+  # --rm means to remove the container after the command run
+  docker run --rm influxdb:1.6.4 influxd config > influxdb.conf
+  
+  
+  kubectl create configmap influxdb-config --from-file influxdb.conf -n influxdb
+  kubectl get cm influxdb-config -n influxdb
+  ```
+
+- create deployment yaml
+
+  `kubectl get deploy influxdb -n influxdb -o yaml > influxdb_deploy.yaml`
+
+  ```yaml
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    annotations:
+      deployment.kubernetes.io/revision: "4"
+    labels:
+      app: influxdb
+    name: influxdb
+    namespace: influxdb
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: influxdb
+    template:
+      metadata:
+        labels:
+          app: influxdb
+      spec:
+        containers:
+        - envFrom:
+          - secretRef:
+              name: influxdb-creds
+          image: docker.io/influxdb:1.6.4
+          imagePullPolicy: IfNotPresent
+          name: influxdb
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /var/lib/influxdb
+            name: var-lib-influxdb
+          - mountPath: /etc/influxdb
+            name: influxdb-config
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - name: var-lib-influxdb
+          persistentVolumeClaim:
+            claimName: influxdb
+        - configMap:
+            defaultMode: 420
+            name: influxdb-config
+          name: influxdb-config
+  ```
+
+- expose service for external access
+
+  ```yaml
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: influxdb-svc
+    namespace: influxdb
+  spec:
+    type: NodePort
+    ports:
+      - port: 8086
+        targetPort: 8086
+        nodePort: 32002
+        name: influxdb
+    selector:
+      app: influxdb
+  ```
+
+- check status
+
+  ```
+  [root@k8smaster influxdb]# kubectl get pods,deployment,rs,svc,ep -n influxdb -o wide
+  NAME                            READY   STATUS    RESTARTS   AGE     IP          NODE       NOMINATED NODE   READINESS GATES
+  pod/influxdb-5c576d94b4-r8ln8   1/1     Running   0          3h26m   10.42.0.5   k8s-n301   <none>           <none>
+  
+  NAME                       READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS   IMAGES                     SELECTOR
+  deployment.apps/influxdb   1/1     1            1           5h55m   influxdb     docker.io/influxdb:1.6.4   app=influxdb
+  
+  NAME                                  DESIRED   CURRENT   READY   AGE     CONTAINERS   IMAGES                     SELECTOR
+  replicaset.apps/influxdb-5c576d94b4   1         1         1       4h2m    influxdb     docker.io/influxdb:1.6.4   app=influxdb,pod-template-hash=5c576d94b4
+  replicaset.apps/influxdb-6564f56995   0         0         0       4h40m   influxdb     docker.io/influxdb:1.6.4   app=influxdb,pod-template-hash=6564f56995
+  replicaset.apps/influxdb-88c898c6f    0         0         0       4h30m   influxdb     docker.io/influxdb:1.6.4   app=influxdb,pod-template-hash=88c898c6f
+  replicaset.apps/influxdb-c4df979df    0         0         0       4h37m   influxdb     docker.io/influxdb:1.6.4   app=influxdb,pod-template-hash=c4df979df
+  
+  NAME                   TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE     SELECTOR
+  service/influxdb-svc   NodePort   10.106.242.32   <none>        8086:32002/TCP   3h32m   app=influxdb
+  
+  NAME                     ENDPOINTS        AGE
+  endpoints/influxdb-svc   10.42.0.5:8086   3h32m
+  ```
+
+### Enble authentication for InfluxDB
+
+- Create db user
+
+  ```
+  kubectl -n influxdb exec influxdb-dp-6c8756cfcd-pc8gf -it -- /bin/bash
+  bash-5.0# influx
+  Connected to http://localhost:8086 version 1.6.4
+  InfluxDB shell version: 1.6.4
+  > CREATE USER root WITH PASSWORD '123456' WITH ALL PRIVILEGES
+  > show users
+  user admin
+  ---- -----
+  root true
+  > exit
+  ```
+
+- modify configmap, to enable authentication
+
+  ```
+  kubectl edit cm influxdb-config  -n influxdb
+  #....skip....
+      [http]
+        enabled = true
+        bind-address = ":8086"
+        auth-enabled = true        #change from false to true
+  #....skip....
+  ```
+
+- Restart pod to reload configmap file
+
+  ```
+  kubectl -n influxdb delete pod influxdb-dp-6c8756cfcd-pc8gf
+  kubectl -n influxdb get pod
+  NAME                           READY   STATUS    RESTARTS   AGE
+  influxdb-dp-6c8756cfcd-fhvws   1/1     Running   0          30s
+  ```
+
+- Test authentication
+
+  ```
+  kubectl -n influxdb exec influxdb-dp-6c8756cfcd-fhvws -it -- /bin/bash
+  bash-5.0# influx
+  Connected to http://localhost:8086 version 1.6.4
+  InfluxDB shell version: 1.6.4
+  > show database;
+  ERR: unable to parse authentication credentials
+  Warning: It is possible this error is due to not setting a database.        
+  Please set a database with the command "use <database>".
+  > auth                                                                      
+  username: root
+  password: 
+  > show databases                                                            
+  name: databases
+  name
+  ----
+  _internal
+  > exit
+  ```
+
+  
+
+### Useful commands
+
+```bash
+# Run a influxdb instand directly with deployment
+kubectl create deployment influxdb --image=docker.io/influxdb:1.6.4 -n influxdb
+
+# edit the resource on-line
+kubectl edit deployment influxdb -n influxdb
+
+# Test influxdb connection, data writing and reading
+----
+#!/bin/bash
+while true
+do
+processes=$(cat /proc/stat | awk '/processes/{print $2}')
+curl -i -XPOST 'http://192.168.22.61:32002/write?db=test' --data-binary "performance,type=processes value=$processes"
+sleep 60
+done
+----
+
+[root@nfs ~]# ./test.sh 
+HTTP/1.1 204 No Content
+Content-Type: application/json
+Request-Id: 493a3dd6-3fdd-11ed-8007-000000000000
+X-Influxdb-Build: OSS
+X-Influxdb-Version: 1.6.4
+X-Request-Id: 493a3dd6-3fdd-11ed-8007-000000000000
+Date: Thu, 29 Sep 2022 09:58:36 GMT
+
+HTTP/1.1 204 No Content
+Content-Type: application/json
+Request-Id: 6d125a7f-3fdd-11ed-8008-000000000000
+X-Influxdb-Build: OSS
+X-Influxdb-Version: 1.6.4
+X-Request-Id: 6d125a7f-3fdd-11ed-8008-000000000000
+Date: Thu, 29 Sep 2022 09:59:36 GMT
+
+
+[root@nfs ~]# curl -G 'http://192.168.22.61:32002/query?pretty=true' --data-urlencode "db=test" --data-urlencode "q=select * from performance order by time desc"
+{
+    "results": [
+        {
+            "statement_id": 0,
+            "series": [
+                {
+                    "name": "performance",
+                    "columns": [
+                        "time",
+                        "type",
+                        "value"
+                    ],
+                    "values": [
+                        [
+                            "2022-09-29T09:59:36.859605683Z",
+                            "processes",
+                            7109601
+                        ],
+                        [
+                            "2022-09-29T09:58:36.723087558Z",
+                            "processes",
+                            7109596
+                        ]
+                    ]
+                }
+            ]
+        }
+    ]
+}
+```
+
+
+
+
+
 # 02. CICD configuration
 
 ## 02.1. Configure Gitlab
