@@ -1007,7 +1007,8 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
   - Create a new Jenkins task: *test* with freestyle project
     - configure source code management with git
     - Repository URL: ssh://git@192.168.22.85/myapp/test.git
-
+  - Branches to build:  */main
+  
 - Install cloudbase plug-in
   - [CloudBees Docker Build and Publish pluginVersion1.4.0](https://plugins.jenkins.io/docker-build-publish)
 
