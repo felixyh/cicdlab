@@ -1087,42 +1087,10 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
     -rw-r--r--. 1 root root 8 Sep 29 09:56 README.md
     ```
 
-    
-
-## 02.2. Configure Jenkins
-
-- Create account
-  - Name: *felix*
-  
-- Create jenkins credential with kind: *SSH Username with private key*
-  - ID: demo
-  
-  - Username: git
-  
-  - Private Key:  <pasted from rancher server: ~/.ssh/id_rsa>
-  
-  - Create a new Jenkins task: *test* with freestyle project
-    - configure source code management with git
-  
-    - Repository URL: ssh://git@192.168.22.85/myapp/test.git
-  
-    - If there's error "[Jenkins Host key verification failed](https://stackoverflow.com/questions/15174194/jenkins-host-key-verification-failed)" , [refer to this solution](https://stackoverflow.com/questions/15174194/jenkins-host-key-verification-failed).
-  
-      ```bash
-      sudo su -s /bin/bash jenkins
-      git ls-remote -h -- ssh://git@192.168.22.85/myapp/test.git HEAD
-      
-      cat ~/.ssh/known_hosts
-      ```
-  
-  - Branches to build:  */main
-  
-- Install cloudbase plug-in
-  - [CloudBees Docker Build and Publish pluginVersion1.4.0](https://plugins.jenkins.io/docker-build-publish)
 
 
 
-## 02.3. Configure Harbor
+## 02.2. Configure Harbor
 
 - Create project
   - project name: *demo*
@@ -1131,4 +1099,180 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
   - Name: *felix*
 - Assign user into the project
   - Role: *project admin*
-- 
+
+
+
+## 02.3. Configure Jenkins
+
+- Create account
+  - Name: *felix*
+
+- Create jenkins credential with kind: *SSH Username with private key*
+  - ID: demo
+
+  - Username: git
+
+  - Private Key:  <pasted from rancher server: ~/.ssh/id_rsa>
+
+  - Create a new Jenkins task: *myapp *with freestyle project
+    - configure source code management with git
+
+    - Repository URL: ssh://git@192.168.22.85/myapp/test.git
+
+    - If there's error "[Jenkins Host key verification failed](https://stackoverflow.com/questions/15174194/jenkins-host-key-verification-failed)" , [refer to this solution](https://stackoverflow.com/questions/15174194/jenkins-host-key-verification-failed).
+
+      ```bash
+      sudo su -s /bin/bash jenkins
+      git ls-remote -h -- ssh://git@192.168.22.85/myapp/test.git HEAD
+      
+      cat ~/.ssh/known_hosts
+      ```
+
+  - Branches to build:  */main
+
+- Install cloudbase plug-in
+  - [CloudBees Docker Build and Publish pluginVersion1.4.0](https://plugins.jenkins.io/docker-build-publish)
+
+- Add user: *Jenkins* into group: *docker*, to ensure read priviledge of docker/unix socket
+
+  ```bash
+  usermod -a -G docker jenkins
+  systemctl restart jenkins
+  newgrp docker
+  ```
+
+- Add docker authentication, ensure jenkins access harbor through http
+
+  ```bash
+  vi /etc/docker/daemon.json
+  {
+    "insecure-registries": ["http://192.168.22.86"]
+  }
+  
+  systemctl daemon-reload && systemctl restart docker
+  ```
+
+  
+
+  on Jenkins console , add a new global credentials (kind: username with password)
+
+  - username: felix
+  - password: <harbor password>
+
+- Update existing Jenkins task: *myapp*, add "docker build and publish"
+
+  - Repository Name: <harbor repository: "demo/test">
+
+  - Docker Host URL: unix:///var/run/docker.sock
+
+  - Docker registry URL: http://192.168.22.86
+
+  - Registry credentials: felix/**** <harbor account>
+
+    
+
+  
+
+# 03. CICD Testing
+
+## CI testing
+
+- push docker file, source code: start.sh to gitlab
+
+  ```bash
+  git clone http://192.168.22.85/myapp/test.git
+  cd test/
+  
+  
+  [root@rancher test]# more Dockerfile 
+  From centos
+  
+  USER root
+  ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  ADD ./ /root/
+  CMD ["bash /root/start.sh"]
+  
+  [root@rancher test]# more start.sh 
+  #!/bin/bash
+  while true
+  do
+  processes=$(cat /proc/stat | awk '/processes/{print $2}')
+  curl -i -XPOST 'http://192.168.22.61:32002/write?db=test' --data-binary "performance,type=processes value=$processes"sleep 60
+  done
+  
+  
+  [root@rancher test]# git config --global user.name "felix"
+  [root@rancher test]# git config --global user.email "felix@demo.com"
+  
+  [root@rancher test]# git add .
+  [root@rancher test]# git commit -m "add docker file"
+  [root@rancher test]# git push origin main
+  ```
+
+  
+
+- Go to Jenkins > myapp, build now
+
+  ```
+  Started by user felix
+  Running as SYSTEM
+  Building in workspace /var/lib/jenkins/workspace/myapp
+  The recommended git tool is: NONE
+  using credential a9ec308d-cc1a-4d6e-bfd5-003325dd5944
+   > git rev-parse --resolve-git-dir /var/lib/jenkins/workspace/myapp/.git # timeout=10
+  Fetching changes from the remote Git repository
+   > git config remote.origin.url ssh://git@192.168.22.85/myapp/test.git # timeout=10
+  Fetching upstream changes from ssh://git@192.168.22.85/myapp/test.git
+   > git --version # timeout=10
+   > git --version # 'git version 2.31.1'
+  using GIT_SSH to set credentials cicdtest
+  Verifying host key using known hosts file
+   > git fetch --tags --force --progress -- ssh://git@192.168.22.85/myapp/test.git +refs/heads/*:refs/remotes/origin/* # timeout=10
+   > git rev-parse refs/remotes/origin/main^{commit} # timeout=10
+  Checking out Revision 6119d6d79088ba5cfa8fb6eba368f51dcf5e12f1 (refs/remotes/origin/main)
+   > git config core.sparsecheckout # timeout=10
+   > git checkout -f 6119d6d79088ba5cfa8fb6eba368f51dcf5e12f1 # timeout=10
+  Commit message: "add start.sh"
+   > git rev-list --no-walk e73b7cbe817d832caef117e9adcd400906517626 # timeout=10
+  [myapp] $ docker build -t 192.168.22.86/demo/test --pull=true /var/lib/jenkins/workspace/myapp
+  WARNING: Support for the legacy ~/.dockercfg configuration file and file-format is deprecated and will be removed in an upcoming release
+  Sending build context to Docker daemon  69.63kB
+  
+  Step 1/5 : From centos
+  latest: Pulling from library/centos
+  Digest: sha256:a27fd8080b517143cbbbab9dfb7c8571c40d67d534bbdee55bd6c473f432b177
+  Status: Image is up to date for centos:latest
+   ---> 5d0da3dc9764
+  Step 2/5 : USER root
+   ---> Using cache
+   ---> 566a6bb50798
+  Step 3/5 : ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+   ---> Using cache
+   ---> 976874dd9ea6
+  Step 4/5 : ADD ./ /root/
+   ---> 89f3bef76911
+  Step 5/5 : CMD ["bash /root/start.sh"]
+   ---> Running in 27a4eec3ac71
+  Removing intermediate container 27a4eec3ac71
+   ---> d3821c155ee9
+  Successfully built d3821c155ee9
+  Successfully tagged 192.168.22.86/demo/test:latest
+  [myapp] $ docker inspect d3821c155ee9
+  WARNING: Support for the legacy ~/.dockercfg configuration file and file-format is deprecated and will be removed in an upcoming release
+  [myapp] $ docker push 192.168.22.86/demo/test
+  WARNING: Support for the legacy ~/.dockercfg configuration file and file-format is deprecated and will be removed in an upcoming release
+  Using default tag: latest
+  The push refers to repository [192.168.22.86/demo/test]
+  064ab7092af0: Preparing
+  74ddd0ec08fa: Preparing
+  74ddd0ec08fa: Layer already exists
+  064ab7092af0: Pushed
+  latest: digest: sha256:486091b0f6dab11302a808a99988b26ed52ed093beaa830c9a104c988b808805 size: 738
+  Finished: SUCCESS
+  ```
+
+- Check harbor repository, confirm the image is created
+
+  
+
+  
