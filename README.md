@@ -24,7 +24,9 @@ Gitlab: 192.168.22.85. root/P@ssw0rd
 
 Harbor: 192.168.22.86 admin/novirus
 
-Jenkins on Kubernetes: 192.168.22.61:32001 
+Jenkins on Kubernetes: 192.168.22.61:32001
+
+Jenkins on CentOS8: 192.168.22.87:8080 
 
 
 
@@ -490,7 +492,7 @@ gitlab-cmd start
 
 ## 01.4. Setup Jenkins
 
-### Set up a Jenkins server on Kubernetes
+### Option-1: Set up a Jenkins server on Kubernetes
 
 [How To Setup Jenkins On Kubernetes Cluster – Beginners Guide](https://devopscube.com/setup-jenkins-on-kubernetes-cluster/)
 
@@ -512,7 +514,7 @@ jenkins@jenkins-b96f7764f-g5fhh:/$ cat /var/jenkins_home/secrets/initialAdminPas
 04a4a6c9e79c4428930a92f433427dce
 ```
 
-## Errors and resolution
+#### Errors and resolution
 
 ```
 "An error occurred during installation: No such plugin: cloudbees-folder"
@@ -521,6 +523,97 @@ jenkins@jenkins-b96f7764f-g5fhh:/$ cat /var/jenkins_home/secrets/initialAdminPas
 Resoluton is to restart Jenkins: http://localhost:8080/restart
 
 ![image-20220929112415962](/Users/felix_yang/Library/Application Support/typora-user-images/image-20220929112415962.png)
+
+### Option-2: Set up a Jenkins server on CentOS8
+
+Reference:
+
+https://sysadminxpert.com/install-openjdk-11-on-centos-7/
+
+https://www.jianshu.com/p/85ab4db26857
+
+<!--Need to install Java 11-->
+
+- Install OpenJDK 11
+
+  ```bash
+   yum -y install java-11-openjdk java-11-openjdk-devel
+   echo "export JAVA_HOME=$(dirname $(dirname $(readlink $(readlink $(which javac)))))" >> ~/.bash_profile
+   cat ~/.bash_profile
+  
+  java –version
+  
+  echo $JAVA_HOME
+  ```
+
+  
+
+- Set or configure default Java version if there's another/old version already installed
+
+  ```bash
+  alternatives --config javac
+  
+  # Set JAVA_HOME Environment Variable
+  vim ~/.bash_profile
+  
+  JAVA_HOME="/usr/lib/jvm/java-11-openjdk-11.0.7.10-4.el7_8.x86_64/bin/java"
+  
+  source ~/.bash_profile
+  echo $JAVA_HOME
+  ```
+
+  
+
+- Test Java installation
+
+  ```bash
+  cat > hello_world.java <<EOF
+  public class helloworld {
+    public static void main(String[] args) {
+      System.out.println("Hello Java World!");
+    }
+  }
+  EOF
+  
+  java hello_world.java
+  ```
+
+  
+
+- Add the Jenkins Repository and Verify security key
+
+  ```bash
+  sudo wget -O /etc/yum.repos.d/jenkins.repo http://pkg.jenkins-ci.org/redhat-stable/jenkins.repo
+  sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key
+  
+  ```
+
+- Update packages
+
+  ```bash
+  yum update
+  ```
+
+- Install Jenkins
+
+  ```bash
+  yum install jenkins -y
+  ```
+
+- Configure and start Jenkins service 
+
+  ```bash
+  systemctl daemon-reload
+  systemctl start jenkins
+  ```
+
+- Get initial password
+
+  ```bash
+  cat /var/lib/jenkins/secrets/initialAdminPassword
+  ```
+
+  
 
 ## 01.5. Setup Harbor
 
@@ -1000,19 +1093,32 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
 
 - Create account
   - Name: *felix*
+  
 - Create jenkins credential with kind: *SSH Username with private key*
   - ID: demo
+  
   - Username: git
+  
   - Private Key:  <pasted from rancher server: ~/.ssh/id_rsa>
+  
   - Create a new Jenkins task: *test* with freestyle project
     - configure source code management with git
+  
     - Repository URL: ssh://git@192.168.22.85/myapp/test.git
+  
+    - If there's error "[Jenkins Host key verification failed](https://stackoverflow.com/questions/15174194/jenkins-host-key-verification-failed)" , [refer to this solution](https://stackoverflow.com/questions/15174194/jenkins-host-key-verification-failed).
+  
+      ```bash
+      sudo su -s /bin/bash jenkins
+      git ls-remote -h -- ssh://git@192.168.22.85/myapp/test.git HEAD
+      
+      cat ~/.ssh/known_hosts
+      ```
+  
   - Branches to build:  */main
   
 - Install cloudbase plug-in
   - [CloudBees Docker Build and Publish pluginVersion1.4.0](https://plugins.jenkins.io/docker-build-publish)
-
-
 
 
 
