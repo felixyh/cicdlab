@@ -1175,7 +1175,7 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
 
 # 03. CICD Testing
 
-## CI testing
+## CI Testing with Jenkins, Gitlab, Harbor
 
 - push docker file, source code: start.sh to gitlab
 
@@ -1190,7 +1190,7 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
   USER root
   ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   ADD ./ /root/
-  CMD ["bash /root/start.sh"]
+  CMD ["/root/start.sh"]
   
   [root@rancher test]# more start.sh 
   #!/bin/bash
@@ -1276,3 +1276,19 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
   
 
   
+
+## CD Testing with Rancher
+
+- add below insecure access for all nodes of K8s cluster, ensure each node can access insure harbor server
+
+  ```bash
+  cat > /etc/docker/daemon.json <<EOF
+  {
+    "insecure-registries": ["http://192.168.22.86"]
+  }
+  EOF
+  systemctl daemon-reload && systemctl restart docker
+  ```
+
+- 
+
