@@ -1,7 +1,5 @@
 [TOC]
 
-![image-20220928221847347](/Users/felix_yang/Library/Application Support/typora-user-images/image-20220928221847347.png)
-
 
 
 # 01. Installation
@@ -20,13 +18,15 @@ K8S Node-2: 192.168.22.93
 
 Rancher: 192.168.22.84 admin/novirus
 
-Gitlab: 192.168.22.85. root/P@ssw0rd
+GitLab: 192.168.22.85. root/P@ssw0rd
 
 Harbor: 192.168.22.86 admin/novirus
 
 Jenkins on Kubernetes: 192.168.22.61:32001
 
 Jenkins on CentOS8: 192.168.22.87:8080 
+
+Grafana:  192.168.22.61:32000
 
 
 
@@ -63,6 +63,12 @@ lsmod | grep br_netfilter
 
 # Network gateway and proxy settings, only GW=192.168.0.250 can reach TW proxy=10.64.1.81:8080
 route -n | grep -i ug
+
+# sync time with chronyd
+sudo systemctl start chronyd
+sudo systemctl enable chronyd
+chronyc activity
+chronyc tracking
 ```
 
 #### Set proxy for Lab environment
@@ -520,9 +526,7 @@ jenkins@jenkins-b96f7764f-g5fhh:/$ cat /var/jenkins_home/secrets/initialAdminPas
 "An error occurred during installation: No such plugin: cloudbees-folder"
 ```
 
-Resoluton is to restart Jenkins: http://localhost:8080/restart
-
-![image-20220929112415962](/Users/felix_yang/Library/Application Support/typora-user-images/image-20220929112415962.png)
+Resolution is to restart Jenkins: http://localhost:8080/restart
 
 ### Option-2: Set up a Jenkins server on CentOS8
 
@@ -675,7 +679,7 @@ Install harbor
 
 ### Access the harbor console
 
-![image-20220929090554818](/Users/felix_yang/Library/Application Support/typora-user-images/image-20220929090554818.png)
+![image-20221002100923461](README.assets/image-20221002100923461.png)
 
 
 
@@ -875,7 +879,7 @@ https://opensource.com/article/19/2/deploy-influxdb-grafana-kubernetes
   endpoints/influxdb-svc   10.42.0.5:8086   3h32m
   ```
 
-### Enble authentication for InfluxDB
+### Enable authentication for InfluxDB
 
 - Create db user
 
@@ -1062,7 +1066,7 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
 
   - Copy id_rsa.pub text into **public SSH key** field
 
-    ![image-20220929100459818](/Users/felix_yang/Library/Application Support/typora-user-images/image-20220929100459818.png)
+    ![image-20221002101228652](README.assets/image-20221002101228652.png)
 
   - Test connection and git pull from rancher server
 
@@ -1183,6 +1187,7 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
   git clone http://192.168.22.85/myapp/test.git
   cd test/
   
+  chmod +x start.sh
   
   [root@rancher test]# more Dockerfile 
   From centos
@@ -1290,5 +1295,93 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
   systemctl daemon-reload && systemctl restart docker
   ```
 
-- 
+- create deploy to deploy workload via Rancher
 
+  ```bash
+  [root@cicdlab001 ~]# kubectl get pods -n cicdtest -o wide
+  NAME                    READY   STATUS    RESTARTS   AGE   IP          NODE GATES
+  test-58b7787d9d-9r2kn   1/1     Running   0          44s   10.44.0.1   cicd
+  test-58b7787d9d-sb6x5   1/1     Running   0          44s   10.36.0.2   cicd
+  
+  ```
+
+- verify influx db - confirm the latest data already written in databa
+
+  ```bash
+  [root@rancher test]# curl -G 'http://192.168.22.61:32002/query?pretty=true' --data-urlencode "db=test" --data-urlencode "q=select * from performance order by time desc"
+  {
+      "results": [
+          {
+              "statement_id": 0,
+              "series": [
+                  {
+                      "name": "performance",
+                      "columns": [
+                          "time",
+                          "type",
+                          "value"
+                      ],
+                      "values": [
+                          [
+                              "2022-10-01T16:37:15.037646251Z",
+                              "processes",
+                              1530626
+                          ],
+                          [
+                              "2022-10-01T16:37:15.000946467Z",
+                              "processes",
+                              1529608
+                          ],
+                          [
+                              "2022-10-01T16:36:15.012783232Z",
+                              "processes",
+                              1530322
+                          ],
+                          [
+                              "2022-10-01T16:36:14.979504738Z",
+                              "processes",
+                              1529306
+                          ],
+                          [
+                              "2022-10-01T16:35:14.980991216Z",
+                              "processes",
+                              1530004
+                          ],
+                          [
+                              "2022-10-01T16:35:14.944116291Z",
+                              "processes",
+                              1528989
+                          ],
+                          [
+                              "2022-09-29T09:59:36.859605683Z",
+                              "processes",
+                              7109601
+                          ],
+                          [
+                              "2022-09-29T09:58:36.723087558Z",
+                              "processes",
+                              7109596
+                          ]
+                      ]
+                  }
+              ]
+          }
+      ]
+  }
+  ```
+
+  
+
+## Configure Grafana to display the data
+
+- Configure grafana data source with influxdb
+
+  ![image-20221002101502662](README.assets/image-20221002101502662.png)
+
+  ![image-20221002101537582](README.assets/image-20221002101537582.png)
+
+- Create dashboard
+
+  ![image-20221002101644194](README.assets/image-20221002101644194.png)
+
+  
