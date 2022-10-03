@@ -1218,6 +1218,8 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
 
 - Go to Jenkins > myapp, build now
 
+  <!--the dockerfile name must be "Dockerfile" in source code,otherwise Jenkins can not fine the dockerfile when building image-->
+
   ```
   Started by user felix
   Running as SYSTEM
