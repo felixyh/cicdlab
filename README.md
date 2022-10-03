@@ -675,6 +675,75 @@ Install harbor
 ./install.sh 
 ```
 
+### Optional - HTTPS access enablement
+
+```bash
+openssl genrsa -out root.pem 2048
+openssl req -new -sha256 -out root.csr -key root.pem \
+-subj "/C=CN/ST=jiangsu/L=nj/O=test/OU=Personal/CN=192.168.22.86" 
+openssl req -x509 -new -nodes -sha256 -days 365 \
+ -subj "/C=CN/ST=jiangsu/L=nj/O=test/OU=Personal/CN=192.168.22.86" \
+ -key root.pem \
+ -out root.crt
+ 
+ 
+cat > v3.ext <<-EOF
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = IP:192.168.56.108
+EOF
+
+
+
+openssl genrsa -out ca_harbor.pem 2048
+openssl req -new -sha256 -out ca_harbor.csr -key ca_harbor.pem
+openssl x509 -req -sha512 -days 365 \
+    -extfile v3.ext \
+    -CA root.crt -CAkey root.pem -CAcreateserial \
+    -in ca_harbor.csr \
+    -out ca_harbor.crt
+
+
+openssl x509 -inform PEM -in ca_harbor.crt -out ca_harbor.cert
+
+mkdir -p /etc/docker/certs.d/192.168.22.86/
+cp ca_harbor.cert /data/cert/ca_harbor.cert
+cp ca_harbor.pem /data/cert/ca_harbor.pem
+cp ca_harbor.crt /data/cert/ca_harbor.crt
+cp /data/cert/ca_harbor.cert /etc/docker/certs.d/192.168.22.86/
+cp /data/cert/ca_harbor.pem /etc/docker/certs.d/192.168.22.86/
+cp /data/cert/ca_harbor.crt /etc/docker/certs.d/192.168.22.86/
+
+
+/usr/local/harbor/
+vi harbor.yml
+++++++++++++++
+hostname: 192.168.22.86
+
+# http related config
+http:
+  # port for http, default is 80. If https enabled, this port will redirect to https port
+  port: 80
+
+# https related config
+https:
+  # https port for harbor, default is 443
+  port: 443
+  # The path of cert and key files for nginx
+  certificate: /data/cert/ca_harbor.cert
+  private_key: /data/cert/ca_harbor.pem
++++++++++++++++
+
+docker-compose down -v
+systemctl restart docker
+
+./install.sh
+
+netstat -nplt
+```
+
 
 
 ### Access the harbor console
