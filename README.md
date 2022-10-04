@@ -1,6 +1,6 @@
 [TOC]
 
-![image-20221002110216278](README.assets/image-20221002110216278.png)
+![image-20221002110216278](https://felixyanghui.synology.me:8441/images/2022/10/04/image-20221002110216278.png)
 
 # 01. Installation
 
@@ -748,7 +748,7 @@ netstat -nplt
 
 ### Access the harbor console
 
-![image-20221002100923461](README.assets/image-20221002100923461.png)
+![image-20221002100923461](https://felixyanghui.synology.me:8441/images/2022/10/04/image-20221002100923461.png)
 
 
 
@@ -1135,7 +1135,7 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
 
   - Copy id_rsa.pub text into **public SSH key** field
 
-    ![image-20221002101228652](README.assets/image-20221002101228652.png)
+    ![image-20221002101228652](https://felixyanghui.synology.me:8441/images/2022/10/04/image-20221002101228652.png)
 
   - Test connection and git pull from rancher server
 
@@ -1447,12 +1447,12 @@ Date: Thu, 29 Sep 2022 09:59:36 GMT
 
 - Configure grafana data source with influxdb
 
-  ![image-20221002101502662](README.assets/image-20221002101502662.png)
+  ![image-20221002101502662](https://felixyanghui.synology.me:8441/images/2022/10/04/image-20221002101502662.png)
 
-  ![image-20221002101537582](README.assets/image-20221002101537582.png)
+  ![image-20221002101537582](https://felixyanghui.synology.me:8441/images/2022/10/04/image-20221002101537582.png)
 
 - Create dashboard
 
-  ![image-20221002101644194](README.assets/image-20221002101644194.png)
+  ![image-20221002101644194](https://felixyanghui.synology.me:8441/images/2022/10/04/image-20221002101644194.png)
 
   
